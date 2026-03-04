@@ -1,4 +1,4 @@
-# To-do-List-Figma
+# To-do-List-App
 
 A robust, scalable, and user-friendly To-Do List application developed with **Flutter** and **Dart**. The entire UI/UX was prototyped and refined in **Figma** prior to implementation, ensuring a seamless user experience.
 
