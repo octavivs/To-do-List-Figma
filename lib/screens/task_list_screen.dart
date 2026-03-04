@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-// Note: In your project, you would import your models and mock data here
 import '../models/task.dart';
 import '../data/mock_data.dart';
 
@@ -11,8 +10,110 @@ class TaskListScreen extends StatefulWidget {
 }
 
 class _TaskListScreenState extends State<TaskListScreen> {
-  // We bring the list of tasks from our MockData class
+  // Bring the list of tasks from our MockData class
   final List<Task> tasks = MockData.myTasks;
+
+  // FLUTTER CONCEPT: TextEditingController
+  // These controllers act like a bridge between the UI (the text fields)
+  // and our logic. They allow us to read what the user types in real-time.
+  final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _descriptionController = TextEditingController();
+
+  // ---
+  // MODAL BOTTOM SHEET METHOD (USER STORY #1)
+  // ---
+  void _showAddTaskModal(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled:
+          true, // Allows the modal to resize when the keyboard appears
+      builder: (BuildContext ctx) {
+        // UI CONCEPT: Padding & MediaQuery (The Keyboard Trick)
+        // We add dynamic padding to the bottom exactly equal to the keyboard's height.
+        // This pushes the entire modal up so the input fields are never hidden!
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+            left: 16,
+            right: 16,
+            top: 16,
+          ),
+          child: Column(
+            mainAxisSize:
+                MainAxisSize.min, // Takes only the vertical space it needs
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Add New Task',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              TextField(
+                controller: _titleController,
+                decoration: const InputDecoration(labelText: 'Task Title'),
+                autofocus: true, // UX DETAIL: Automatically opens the keyboard
+              ),
+              TextField(
+                controller: _descriptionController,
+                decoration: const InputDecoration(
+                  labelText: 'Description (Optional)',
+                ),
+              ),
+              const SizedBox(height: 16), // Visual spacing
+              // SAVE BUTTON
+              SizedBox(
+                width: double.infinity, // Makes the button stretch full-width
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blueAccent,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () {
+                    // ACCEPTANCE CRITERIA 3: Empty task prevention
+                    // We use '.trim()' to remove accidental blank spaces.
+                    if (_titleController.text.trim().isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Task title cannot be empty!'),
+                        ),
+                      );
+                      return; // Stops the function execution here
+                    }
+
+                    // ACCEPTANCE CRITERIA 2: Saving the task
+                    // We instantiate a new Task object using the OOP principles.
+                    final newTask = Task(
+                      id: DateTime.now().millisecondsSinceEpoch
+                          .toString(), // Simple unique ID
+                      title: _titleController.text.trim(),
+                      description: _descriptionController.text.trim(),
+                      createdAt: DateTime.now(),
+                      appUserId: 'user_001', // Linked to our mock user
+                      categoryId: 'cat_1', // Default category for now
+                    );
+
+                    // UPDATE THE STATE (UI)
+                    setState(() {
+                      // We use insert(0, ...) to add the new task at the top of the list!
+                      tasks.insert(0, newTask);
+                    });
+
+                    // CLEAN UP: Clear text fields for the next time it opens
+                    _titleController.clear();
+                    _descriptionController.clear();
+
+                    // Close the modal
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Save Task'),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -26,7 +127,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
       // This is the most efficient way to create a list in Flutter.
       // It only renders the items that are visible on the screen!
       body: ListView.builder(
-        itemCount: tasks.length, // Tells Flutter how many items to draw
+        itemCount: tasks.length,
         itemBuilder: (context, index) {
           // We get the specific task object for this position (index)
           final task = tasks[index];
@@ -38,7 +139,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
               value: task.isCompleted,
               onChanged: (bool? newValue) {
                 // OOP & FLUTTER CONCEPT: setState
-                // This function tells Flutter: "Something changed in the data, 
+                // This function tells Flutter: "Something changed in the data,
                 // please redraw the screen so the user can see it!"
                 setState(() {
                   task.isCompleted = newValue ?? false;
@@ -50,22 +151,26 @@ class _TaskListScreenState extends State<TaskListScreen> {
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 // USER STORY #2: Visual indicator for completion
-                decoration: task.isCompleted 
-                    ? TextDecoration.lineThrough 
+                decoration: task.isCompleted
+                    ? TextDecoration.lineThrough
                     : TextDecoration.none,
                 color: task.isCompleted ? Colors.grey : Colors.black87,
               ),
             ),
             subtitle: Text(task.description),
-            trailing: const Icon(Icons.swipe_left, color: Colors.grey, size: 16),
+            trailing: const Icon(
+              Icons.swipe_left,
+              color: Colors.grey,
+              size: 16,
+            ),
           );
         },
       ),
-      // USER STORY #1: The Add Button (+)
+      // USER STORY #1: ACCEPTANCE CRITERIA 1 - Triggering the modal
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          // For now, this just prints to the console
-          print('User wants to add a new task!');
+          // Now we call our new function!
+          _showAddTaskModal(context);
         },
         backgroundColor: Colors.blueAccent,
         child: const Icon(Icons.add, color: Colors.white),
