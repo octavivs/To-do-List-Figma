@@ -58,10 +58,9 @@ class _TaskListScreenState extends State<TaskListScreen> {
   }
 
   // ---
-  // MODAL BOTTOM SHEET (CREATE & UPDATE)
+  // MODAL BOTTOM SHEET (FIXED KEYBOARD ISSUE)
   // ---
   void _showTaskModal(BuildContext context, [Task? existingTask]) {
-    // Inject existing data if editing, or clear if creating a new task
     if (existingTask != null) {
       _titleController.text = existingTask.title;
       _descriptionController.text = existingTask.description;
@@ -74,87 +73,88 @@ class _TaskListScreenState extends State<TaskListScreen> {
       context: context,
       isScrollControlled: true,
       builder: (BuildContext ctx) {
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
-            left: 16,
-            right: 16,
-            top: 16,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                existingTask != null ? 'Edit Task' : 'Add New Task',
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              TextField(
-                controller: _titleController,
-                decoration: const InputDecoration(labelText: 'Task Title'),
-                autofocus: true,
-              ),
-              TextField(
-                controller: _descriptionController,
-                decoration: const InputDecoration(
-                  labelText: 'Description (Optional)',
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blueAccent,
-                    foregroundColor: Colors.white,
+        // FLUTTER BUG FIX: SingleChildScrollView
+        // This is required on Android to allow the bottom sheet to be pushed UP
+        // by the keyboard without overflowing or being hidden.
+        return SingleChildScrollView(
+          child: Padding(
+            // We keep the padding to give space exactly where the keyboard appears
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom,
+              left: 16,
+              right: 16,
+              top: 16,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  existingTask != null ? 'Edit Task' : 'Add New Task',
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
                   ),
-                  onPressed: () {
-                    // Validation: Prevent empty tasks
-                    if (_titleController.text.trim().isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Task title cannot be empty!'),
-                        ),
-                      );
-                      return;
-                    }
-
-                    setState(() {
-                      if (existingTask != null) {
-                        // UPDATE LOGIC
-                        existingTask.title = _titleController.text.trim();
-                        existingTask.description = _descriptionController.text
-                            .trim();
-                      } else {
-                        // CREATE LOGIC
-                        final newTask = Task(
-                          id: DateTime.now().millisecondsSinceEpoch.toString(),
-                          title: _titleController.text.trim(),
-                          description: _descriptionController.text.trim(),
-                          createdAt: DateTime.now(),
-                          appUserId: 'user_001',
-                          categoryId: 'cat_1',
+                ),
+                TextField(
+                  controller: _titleController,
+                  decoration: const InputDecoration(labelText: 'Task Title'),
+                  autofocus: true,
+                ),
+                TextField(
+                  controller: _descriptionController,
+                  decoration: const InputDecoration(
+                    labelText: 'Description (Optional)',
+                  ),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blueAccent,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: () {
+                      if (_titleController.text.trim().isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Task title cannot be empty!'),
+                          ),
                         );
-                        tasks.insert(0, newTask);
+                        return;
                       }
-                    });
 
-                    // SAVE CHANGES TO DEVICE
-                    _saveTasksToDevice();
+                      setState(() {
+                        if (existingTask != null) {
+                          existingTask.title = _titleController.text.trim();
+                          existingTask.description = _descriptionController.text
+                              .trim();
+                        } else {
+                          final newTask = Task(
+                            id: DateTime.now().millisecondsSinceEpoch
+                                .toString(),
+                            title: _titleController.text.trim(),
+                            description: _descriptionController.text.trim(),
+                            createdAt: DateTime.now(),
+                            appUserId: 'user_001',
+                            categoryId: 'cat_1',
+                          );
+                          tasks.insert(0, newTask);
+                        }
+                      });
 
-                    Navigator.pop(context); // Close the modal
-                  },
-                  child: Text(
-                    existingTask != null ? 'Update Task' : 'Save Task',
+                      _saveTasksToDevice();
+                      Navigator.pop(context);
+                    },
+                    child: Text(
+                      existingTask != null ? 'Update Task' : 'Save Task',
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 16),
-            ],
+                const SizedBox(height: 16),
+              ],
+            ),
           ),
         );
       },
@@ -162,100 +162,146 @@ class _TaskListScreenState extends State<TaskListScreen> {
   }
 
   // ---
-  // UI BUILDER
+  // REUSABLE UI COMPONENT (DRY PRINCIPLE)
+  // ---
+  // OOP CONCEPT: Method Extraction
+  // Instead of writing the ListView code three times for our three tabs,
+  // we create a function that takes a specific list of tasks and builds the UI.
+  Widget _buildTaskList(List<Task> filteredTasks) {
+    if (filteredTasks.isEmpty) {
+      return const Center(
+        child: Text(
+          'No tasks found in this section.',
+          style: TextStyle(fontSize: 18, color: Colors.grey),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      itemCount: filteredTasks.length,
+      itemBuilder: (context, index) {
+        final task = filteredTasks[index];
+
+        return Dismissible(
+          key: ValueKey(task.id),
+          direction: DismissDirection.endToStart,
+          background: Container(
+            color: Colors.red,
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.only(right: 20.0),
+            child: const Icon(Icons.delete, color: Colors.white),
+          ),
+          onDismissed: (direction) {
+            final deletedTask = task;
+
+            // To undo safely across filtered lists, we find the original index
+            final originalIndex = tasks.indexWhere(
+              (t) => t.id == deletedTask.id,
+            );
+
+            setState(() {
+              tasks.removeWhere((t) => t.id == deletedTask.id);
+            });
+
+            _saveTasksToDevice();
+
+            ScaffoldMessenger.of(context).clearSnackBars();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Task "${deletedTask.title}" deleted.'),
+                duration: const Duration(seconds: 4),
+                action: SnackBarAction(
+                  label: 'Undo',
+                  onPressed: () {
+                    setState(() {
+                      tasks.insert(originalIndex, deletedTask);
+                    });
+                    _saveTasksToDevice();
+                  },
+                ),
+              ),
+            );
+          },
+          child: ListTile(
+            onLongPress: () => _showTaskModal(context, task),
+            leading: Checkbox(
+              value: task.isCompleted,
+              onChanged: (bool? newValue) {
+                setState(() {
+                  task.isCompleted = newValue ?? false;
+                });
+                _saveTasksToDevice();
+              },
+            ),
+            title: Text(
+              task.title,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                decoration: task.isCompleted
+                    ? TextDecoration.lineThrough
+                    : TextDecoration.none,
+                color: task.isCompleted ? Colors.grey : Colors.black87,
+              ),
+            ),
+            subtitle: task.description.isNotEmpty
+                ? Text(task.description)
+                : null,
+          ),
+        );
+      },
+    );
+  }
+
+  // ---
+  // MAIN UI BUILDER WITH TABS
   // ---
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('My To-Do List'),
-        backgroundColor: Colors.blueAccent,
-        foregroundColor: Colors.white,
-      ),
-      // Handle empty state gracefully
-      body: tasks.isEmpty
-          ? const Center(
-              child: Text(
-                'No tasks yet. Add one!',
-                style: TextStyle(fontSize: 18, color: Colors.grey),
-              ),
-            )
-          : ListView.builder(
-              itemCount: tasks.length,
-              itemBuilder: (context, index) {
-                final task = tasks[index];
+    // FLUTTER CONCEPT: DefaultTabController
+    // Wraps our Scaffold and automatically syncs the TabBar with the TabBarView.
+    return DefaultTabController(
+      length: 3, // We will have 3 tabs: All, Pending, Completed
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('My To-Do List'),
+          backgroundColor: Colors.blueAccent,
+          foregroundColor: Colors.white,
+          // FLUTTER CONCEPT: TabBar
+          // The visual buttons at the bottom of the AppBar
+          bottom: const TabBar(
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white70,
+            indicatorColor: Colors.white,
+            tabs: [
+              Tab(text: 'All'),
+              Tab(text: 'Pending'),
+              Tab(text: 'Completed'),
+            ],
+          ),
+        ),
 
-                return Dismissible(
-                  key: ValueKey(task.id),
-                  direction: DismissDirection.endToStart,
-                  background: Container(
-                    color: Colors.red,
-                    alignment: Alignment.centerRight,
-                    padding: const EdgeInsets.only(right: 20.0),
-                    child: const Icon(Icons.delete, color: Colors.white),
-                  ),
-                  onDismissed: (direction) {
-                    final deletedTask = task;
-                    final deletedIndex = index;
+        // FLUTTER CONCEPT: TabBarView
+        // The content that changes when you swipe or tap a tab.
+        // The order of children MUST match the order of the tabs above.
+        body: TabBarView(
+          children: [
+            // TAB 1: ALL TASKS
+            _buildTaskList(tasks),
 
-                    setState(() {
-                      tasks.removeAt(index);
-                    });
+            // TAB 2: PENDING TASKS ONLY
+            // We use .where() to filter the list dynamically
+            _buildTaskList(tasks.where((task) => !task.isCompleted).toList()),
 
-                    // SAVE STATE AFTER DELETION
-                    _saveTasksToDevice();
+            // TAB 3: COMPLETED TASKS ONLY
+            _buildTaskList(tasks.where((task) => task.isCompleted).toList()),
+          ],
+        ),
 
-                    ScaffoldMessenger.of(context).clearSnackBars();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Task "${deletedTask.title}" deleted.'),
-                        duration: const Duration(seconds: 4),
-                        action: SnackBarAction(
-                          label: 'Undo',
-                          onPressed: () {
-                            setState(() {
-                              tasks.insert(deletedIndex, deletedTask);
-                            });
-                            // SAVE STATE AGAIN IF UNDO IS CLICKED
-                            _saveTasksToDevice();
-                          },
-                        ),
-                      ),
-                    );
-                  },
-                  child: ListTile(
-                    onLongPress: () => _showTaskModal(context, task),
-                    leading: Checkbox(
-                      value: task.isCompleted,
-                      onChanged: (bool? newValue) {
-                        setState(() {
-                          task.isCompleted = newValue ?? false;
-                        });
-                        // SAVE STATE WHEN CHECKED/UNCHECKED
-                        _saveTasksToDevice();
-                      },
-                    ),
-                    title: Text(
-                      task.title,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        decoration: task.isCompleted
-                            ? TextDecoration.lineThrough
-                            : TextDecoration.none,
-                        color: task.isCompleted ? Colors.grey : Colors.black87,
-                      ),
-                    ),
-                    subtitle: task.description.isNotEmpty
-                        ? Text(task.description)
-                        : null, // Only show subtitle if there is a description
-                  ),
-                );
-              },
-            ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showTaskModal(context),
-        backgroundColor: Colors.blueAccent,
-        child: const Icon(Icons.add, color: Colors.white),
+        floatingActionButton: FloatingActionButton(
+          onPressed: () => _showTaskModal(context),
+          backgroundColor: Colors.blueAccent,
+          child: const Icon(Icons.add, color: Colors.white),
+        ),
       ),
     );
   }
